@@ -41,7 +41,7 @@ export function createFundingTx(actions: Action[]): Promise<Object> {
   })
 }
 
-export const createSpendingTx = (actions: Action[], witness: WitnessComponent[]): Promise<Object> => {
+export const createSpendingTx = (actions: Action[], witness: WitnessComponent[], mintimes: string[], maxtimes: string[]): Promise<Object> => {
   return client.transactions.build(builder => {
     actions.forEach(action => {
       switch (action.type) {
@@ -61,6 +61,12 @@ export const createSpendingTx = (actions: Action[], witness: WitnessComponent[])
           break
       }
     })
+    if (mintimes.length > 0) {
+      builder.minTime = new Date(mintimes[0])
+    }
+    if (maxtimes.length > 0) {
+      builder.maxTime = new Date(maxtimes[0])
+    }
   }).then((tpl) => {
     // there should only be one
     tpl.includesContract = true

@@ -61,7 +61,9 @@ const mapServerTemplate = (tpl): Template => {
       name: clause.name,
       parameters,
       outputs,
-      returnStatement
+      returnStatement,
+      mintimes: clause.mintimes,
+      maxtimes: clause.maxtimes
     } as TemplateClause
   })
 
@@ -76,7 +78,7 @@ const mapServerTemplate = (tpl): Template => {
     instructions: tpl.opcodes.split(" "),
     source: tpl.source,
     contractParameters,
-    clauses
+    clauses,
   } as Template
 }
 
