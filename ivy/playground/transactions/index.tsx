@@ -69,7 +69,7 @@ export const createSpendingTx = (actions: Action[], witness: WitnessComponent[],
         return currMax
       }, mintimes[0])
       const mintime = new Date(max)
-      builder.minTime = mintime.setSeconds(mintime.getSeconds() + 1)
+      builder.minTime = new Date(mintime.setSeconds(mintime.getSeconds() + 1))
     }
     if (maxtimes.length > 0) {
       const min = maxtimes.reduce((currMin, currVal) => {
