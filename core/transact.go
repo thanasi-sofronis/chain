@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+
 	"chain/core/fetch"
 	"chain/core/leader"
 	"chain/core/txbuilder"
@@ -89,6 +91,7 @@ func (a *API) buildSingle(ctx context.Context, req *buildRequest) (*txbuilder.Te
 	if maxTime.Before(time.Now().Add(ttl)) {
 		maxTime = time.Now().Add(ttl)
 	}
+	spew.Dump(minTime, maxTime)
 	tpl, err := txbuilder.Build(ctx, req.Tx, actions, minTime, maxTime)
 	if errors.Root(err) == txbuilder.ErrAction {
 		// Format each of the inner errors contained in the data.

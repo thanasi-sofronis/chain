@@ -130,16 +130,15 @@ export const getSpendContractParameterSelector = (id: string) => {
   return createSelector(
     getSpendContract,
     (spendContract: Contract) => {
-     let spendInput = spendContract.inputMap[id]
-     if (spendInput === undefined) {
-       throw "bad spend input ID: " + id
-     } else {
-       return spendInput
-     }
+      let spendInput = spendContract.inputMap[id]
+      if (spendInput === undefined) {
+        throw "bad spend input ID: " + id
+      } else {
+        return spendInput
+      }
     }
   )
 }
-
 
 export const getSpendInputSelector = (id: string) => {
   return createSelector(
@@ -308,7 +307,7 @@ export const getClauseMintimes = createSelector(
 
     return mintimes.map(argName => {
       const inputMap = spendContract.inputMap
-      return inputMap["contractParameters." + argName + ".timeInput.timestampTimeInput"].value
+      return new Date(inputMap["contractParameters." + argName + ".timeInput.timestampTimeInput"].value)
     })
   }
 )
@@ -324,7 +323,7 @@ export const getClauseMaxtimes = createSelector(
 
     return maxtimes.map(argName => {
       const inputMap = spendContract.inputMap
-      return inputMap["contractParameters." + argName + ".timeInput.timestampTimeInput"].value
+      return new Date(inputMap["contractParameters." + argName + ".timeInput.timestampTimeInput"].value)
     })
   }
 )

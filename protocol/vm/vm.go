@@ -3,7 +3,7 @@ package vm
 import (
 	"encoding/hex"
 	"fmt"
-	"io"
+	"os"
 	"strings"
 
 	"chain/errors"
@@ -38,7 +38,7 @@ var ErrFalseVMResult = errors.New("false VM result")
 
 // TraceOut - if non-nil - will receive trace output during
 // execution.
-var TraceOut io.Writer
+var TraceOut = os.Stdout // io.Writer
 
 func Verify(context *Context) (err error) {
 	defer func() {

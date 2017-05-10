@@ -41,7 +41,7 @@ export function createFundingTx(actions: Action[]): Promise<Object> {
   })
 }
 
-export const createSpendingTx = (actions: Action[], witness: WitnessComponent[], mintimes: string[], maxtimes: string[]): Promise<Object> => {
+export const createSpendingTx = (actions: Action[], witness: WitnessComponent[], mintimes, maxtimes): Promise<Object> => {
   return client.transactions.build(builder => {
     actions.forEach(action => {
       switch (action.type) {
@@ -62,10 +62,24 @@ export const createSpendingTx = (actions: Action[], witness: WitnessComponent[],
       }
     })
     if (mintimes.length > 0) {
-      builder.minTime = new Date(mintimes[0])
+      const max = mintimes.reduce((currMax, currVal) => {
+        if (currVal.getTime() > currMax.getTime()) {
+          return currVal
+        }
+        return currMax
+      }, mintimes[0])
+      const mintime = new Date(max)
+      builder.minTime = mintime.setSeconds(mintime.getSeconds() + 1)
     }
     if (maxtimes.length > 0) {
-      builder.maxTime = new Date(maxtimes[0])
+      const min = maxtimes.reduce((currMin, currVal) => {
+        if (currVal.getTime() < currMin.getTime()) {
+          return currVal
+        }
+        return currMin
+      }, maxtimes[0])
+      const maxtime = new Date(min)
+      builder.maxTime = maxtime.setSeconds(maxtime.getSeconds() - 1)
     }
   }).then((tpl) => {
     // there should only be one
