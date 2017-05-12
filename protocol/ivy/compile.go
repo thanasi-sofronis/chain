@@ -134,6 +134,10 @@ func Compile(r io.Reader, args []ContractArg) (CompileResult, error) {
 	return result, nil
 }
 
+// A name for the stack item representing the compiled, uninstantiated
+// contract body on the stack.  Must not be a legal Ivy identifier.
+const quineName = "<quine>"
+
 func compileContract(contract *contract) ([]byte, error) {
 	if len(contract.clauses) == 0 {
 		return nil, fmt.Errorf("empty contract")
@@ -176,8 +180,8 @@ func compileContract(contract *contract) ([]byte, error) {
 		return nil, err
 	}
 
-	stack := addParamsToStack(nil, contract.params)
-	stack = append(stack, stackEntry(quineName))
+	stack := []stackEntry{stackEntry(quineName)}
+	stack = addParamsToStack(stack, contract.params)
 
 	b := newBuilder()
 
@@ -469,7 +473,7 @@ func compileExpr(b *builder, stack []stackEntry, contract *contract, clause *cla
 					}
 					b.addOp(vm.OP_CATPUSHDATA)
 				}
-				err = compileRef(b, stack, quineName)
+				err := compileRef(b, stack, quineName)
 				if err != nil {
 					return errors.Wrap(err, "compiling contract call")
 				}
