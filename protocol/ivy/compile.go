@@ -73,7 +73,7 @@ func Compile(r io.Reader, args []ContractArg) (CompileResult, error) {
 	if err != nil {
 		return CompileResult{}, errors.Wrap(err, "parse error")
 	}
-	prog, err := compileContract(c, args)
+	prog, err := compileContract(c)
 	if err != nil {
 		return CompileResult{}, errors.Wrap(err, "compiling contract")
 	}
@@ -134,7 +134,7 @@ func Compile(r io.Reader, args []ContractArg) (CompileResult, error) {
 	return result, nil
 }
 
-func compileContract(contract *contract, args []ContractArg) ([]byte, error) {
+func compileContract(contract *contract) ([]byte, error) {
 	if len(contract.clauses) == 0 {
 		return nil, fmt.Errorf("empty contract")
 	}
@@ -177,23 +177,9 @@ func compileContract(contract *contract, args []ContractArg) ([]byte, error) {
 	}
 
 	stack := addParamsToStack(nil, contract.params)
+	stack = append(stack, stackEntry(quineName))
 
 	b := newBuilder()
-	for i := len(args) - 1; i >= 0; i-- {
-		a := args[i]
-		switch {
-		case a.B != nil:
-			var n int64
-			if *a.B {
-				n = 1
-			}
-			b.addInt64(n)
-		case a.I != nil:
-			b.addInt64(*a.I)
-		case a.S != nil:
-			b.addData(*a.S)
-		}
-	}
 
 	if len(contract.clauses) == 1 {
 		err = compileClause(b, stack, contract, env, contract.clauses[0])
@@ -469,13 +455,36 @@ func compileExpr(b *builder, stack []stackEntry, contract *contract, clause *cla
 				if e.fn.String() != contract.name {
 					return nil, fmt.Errorf("calling other contracts not yet supported")
 				}
-				// xxx TODO contract composition
-				return nil, nil
+
+				// xxx typecheck args
+
+				// build the control program for this contract with its new
+				// params
+				b.addData(nil)
+				stack = append(stack, stackEntry(e.String()))
+				for i := len(e.args) - 1; i >= 0; i-- {
+					err := compileExpr(b, stack, contract, clause, env, e.args[i])
+					if err != nil {
+						return errors.Wrap(err, "compiling contract call")
+					}
+					b.addOp(vm.OP_CATPUSHDATA)
+				}
+				err = compileRef(b, stack, quineName)
+				if err != nil {
+					return errors.Wrap(err, "compiling contract call")
+				}
+				b.addOp(vm.OP_CATPUSHDATA)
+				b.addInt64(int64(1 + len(e.args)))
+				b.addOp(vm.OP_CATPUSHDATA)
+				b.addData([]byte{byte(vm.OP_OVER), byte(vm.OP_CHECKPREDICATE)})
+				b.addOp(vm.OP_CATPUSHDATA)
+
+				return nil
 			}
 			return nil, fmt.Errorf("unknown function \"%s\"", e.fn)
 		}
 
-		// type-checking
+		// typecheck args
 		if len(e.args) != len(bi.args) {
 			return nil, fmt.Errorf("wrong number of args for \"%s\": have %d, want %d", bi.name, len(e.args), len(bi.args))
 		}
@@ -558,7 +567,7 @@ func compileExpr(b *builder, stack []stackEntry, contract *contract, clause *cla
 		}
 
 	case varRef:
-		return compileRef(b, stack, counts, e)
+		return compileRef(b, stack, counts, string(e))
 
 	case integerLiteral:
 		b.addInt64(int64(e))
@@ -616,13 +625,13 @@ func compileArg(b *builder, stack []stackEntry, contract *contract, clause *clau
 	return stack, 1, err
 }
 
-func compileRef(b *builder, stack []stackEntry, counts map[string]int, ref varRef) ([]stackEntry, error) {
+func compileRef(b *builder, stack []stackEntry, counts map[string]int, name string) ([]stackEntry, error) {
 	for depth := 0; depth < len(stack); depth++ {
-		if stack[len(stack)-depth-1].matches(ref) {
+		if stack[len(stack)-depth-1].matches(name) {
 			var isFinal bool
-			if count, ok := counts[string(ref)]; ok && count > 0 {
+			if count, ok := counts[name]; ok && count > 0 {
 				count--
-				counts[string(ref)] = count
+				counts[name] = count
 				isFinal = count == 0
 			}
 
@@ -630,7 +639,7 @@ func compileRef(b *builder, stack []stackEntry, counts map[string]int, ref varRe
 			case 0:
 				if !isFinal {
 					b.addOp(vm.OP_DUP)
-					stack = append(stack, stackEntry(ref.String()))
+					stack = append(stack, stackEntry(name))
 				}
 			case 1:
 				if isFinal {
@@ -657,7 +666,7 @@ func compileRef(b *builder, stack []stackEntry, counts map[string]int, ref varRe
 			return stack, nil
 		}
 	}
-	return nil, fmt.Errorf("undefined reference \"%s\"", ref)
+	return nil, fmt.Errorf("undefined reference \"%s\"", name)
 }
 
 func (a *ContractArg) UnmarshalJSON(b []byte) error {

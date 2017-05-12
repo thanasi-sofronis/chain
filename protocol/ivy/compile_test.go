@@ -388,6 +388,60 @@ func TestCompile(t *testing.T) {
 				}},
 			},
 		},
+		{
+			"PriceChanger",
+			priceChanger,
+			CompileResult{
+				Name:    "PriceChanger",
+				Program: mustDecodeHex("557a643000000057795479ae7cac690000c3c251005a79895979895c79895b798956798955890278c089c1633a000000000053795579515979c1"),
+				Value:   "offered",
+				Params: []ContractParam{{
+					Name: "askAmount",
+					Typ:  "Amount",
+				}, {
+					Name: "askAsset",
+					Typ:  "Asset",
+				}, {
+					Name: "sellerKey",
+					Typ:  "PublicKey",
+				}, {
+					Name: "sellerProg",
+					Typ:  "Program",
+				}},
+				Clauses: []ClauseInfo{{
+					Name: "changePrice",
+					Args: []ClauseArg{{
+						Name: "newAmount",
+						Typ:  "Amount",
+					}, {
+						Name: "newAsset",
+						Typ:  "Asset",
+					}, {
+						Name: "sig",
+						Typ:  "Signature",
+					}},
+					Values: []ValueInfo{{
+						Name:    "offered",
+						Program: "PriceChanger(newAmount, newAsset, sellerKey, sellerProg)",
+					}},
+					Mintimes: []string{},
+					Maxtimes: []string{},
+				}, {
+					Name: "redeem",
+					Args: []ClauseArg{},
+					Values: []ValueInfo{{
+						Name:    "payment",
+						Program: "sellerProg",
+						Asset:   "askAsset",
+						Amount:  "askAmount",
+					}, {
+						Name: "offered",
+					}},
+					Mintimes: []string{},
+					Maxtimes: []string{},
+				}},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
