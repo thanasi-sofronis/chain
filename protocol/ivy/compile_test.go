@@ -116,7 +116,8 @@ func TestCompile(t *testing.T) {
 			trivialLock,
 			CompileResult{
 				Name:    "TrivialLock",
-				Program: mustDecodeHex("51"),
+				Body:    mustDecodeHex("51"),
+				Program: mustDecodeHex("015151767900c0"),
 				Value:   "locked",
 				Params:  []ContractParam{},
 				Clauses: []ClauseInfo{{
@@ -135,7 +136,8 @@ func TestCompile(t *testing.T) {
 			lockWithPublicKey,
 			CompileResult{
 				Name:    "LockWithPublicKey",
-				Program: mustDecodeHex("ae7cac"),
+				Body:    mustDecodeHex("7b7cae7cac"),
+				Program: mustDecodeHex("057b7cae7cac51767900c0"),
 				Value:   "locked",
 				Params: []ContractParam{{
 					Name: "publicKey",
@@ -160,7 +162,8 @@ func TestCompile(t *testing.T) {
 			lockWith2of3Keys,
 			CompileResult{
 				Name:    "LockWith3Keys",
-				Program: mustDecodeHex("547a547a526bae71557a536c7cad"),
+				Body:    mustDecodeHex("71526bae71557a536c7cad"),
+				Program: mustDecodeHex("0b71526bae71557a536c7cad51767900c0"),
 				Value:   "locked",
 				Params: []ContractParam{{
 					Name: "pubkey1",
@@ -194,7 +197,8 @@ func TestCompile(t *testing.T) {
 			lockToOutput,
 			CompileResult{
 				Name:    "LockToOutput",
-				Program: mustDecodeHex("0000c3c251557ac1"),
+				Body:    mustDecodeHex("0000c3c251557ac1"),
+				Program: mustDecodeHex("080000c3c251557ac151767900c0"),
 				Value:   "locked",
 				Params: []ContractParam{{
 					Name: "address",
@@ -217,7 +221,8 @@ func TestCompile(t *testing.T) {
 			tradeOffer,
 			CompileResult{
 				Name:    "TradeOffer",
-				Program: mustDecodeHex("547a641300000000007251557ac16323000000547a547aae7cac690000c3c251577ac1"),
+				Body:    mustDecodeHex("557a641300000000007251557ac16323000000557a547aae7cac690000c3c251577ac1"),
+				Program: mustDecodeHex("23557a641300000000007251557ac16323000000557a547aae7cac690000c3c251577ac151767900c0"),
 				Value:   "offered",
 				Params: []ContractParam{{
 					Name: "requestedAsset",
@@ -265,7 +270,8 @@ func TestCompile(t *testing.T) {
 			escrowedTransfer,
 			CompileResult{
 				Name:    "EscrowedTransfer",
-				Program: mustDecodeHex("537a641b000000537a7cae7cac690000c3c251567ac1632a000000537a7cae7cac690000c3c251557ac1"),
+				Body:    mustDecodeHex("547a641b000000547a7cae7cac690000c3c251567ac1632a000000547a7cae7cac690000c3c251557ac1"),
+				Program: mustDecodeHex("2a547a641b000000547a7cae7cac690000c3c251567ac1632a000000547a7cae7cac690000c3c251557ac151767900c0"),
 				Value:   "value",
 				Params: []ContractParam{{
 					Name: "agent",
@@ -309,7 +315,8 @@ func TestCompile(t *testing.T) {
 			collateralizedLoan,
 			CompileResult{
 				Name:    "CollateralizedLoan",
-				Program: mustDecodeHex("557a641c00000000007251567ac1695100c3c251567ac163280000007bc59f690000c3c251577ac1"),
+				Body:    mustDecodeHex("567a641c00000000007251567ac1695100c3c251567ac163280000007bc59f690000c3c251577ac1"),
+				Program: mustDecodeHex("28567a641c00000000007251567ac1695100c3c251567ac163280000007bc59f690000c3c251577ac151767900c0"),
 				Value:   "collateral",
 				Params: []ContractParam{{
 					Name: "balanceAsset",
@@ -363,7 +370,8 @@ func TestCompile(t *testing.T) {
 			revealPreimage,
 			CompileResult{
 				Name:    "RevealPreimage",
-				Program: mustDecodeHex("7caa7c87"),
+				Body:    mustDecodeHex("7baa7c87"),
+				Program: mustDecodeHex("047baa7c8751767900c0"),
 				Value:   "value",
 				Params: []ContractParam{{
 					Name: "hash",
@@ -393,7 +401,8 @@ func TestCompile(t *testing.T) {
 			priceChanger,
 			CompileResult{
 				Name:    "PriceChanger",
-				Program: mustDecodeHex("557a643000000057795379ae7cac690000c3c251005979895879895c79895b79895a798955890278c089c1633a000000000052795479515879c1"),
+				Body:    mustDecodeHex("557a6435000000577a5379ae7cac690000c3c25100597a89597a895c7a895c7a895c7989558902767989008901c089c1633e00000000007b537a51567ac1"),
+				Program: mustDecodeHex("3e557a6435000000577a5379ae7cac690000c3c25100597a89597a895c7a895c7a895c7989558902767989008901c089c1633e00000000007b537a51567ac151767900c0"),
 				Value:   "offered",
 				Params: []ContractParam{{
 					Name: "askAmount",
@@ -451,11 +460,21 @@ func TestCompile(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(got, c.want) {
+				gotBody, _ := vm.Disassemble(got.Body)
 				gotProg, _ := vm.Disassemble(got.Program)
+				wantBody, _ := vm.Disassemble(c.want.Body)
 				wantProg, _ := vm.Disassemble(c.want.Program)
 				gotJSON, _ := json.Marshal(got)
 				wantJSON, _ := json.Marshal(c.want)
-				t.Errorf("got %s [prog: %s]\nwant %s [prog: %s]", string(gotJSON), gotProg, wantJSON, wantProg)
+				t.Errorf(
+					"\ngot  %s\nwant %s\ngot body : %s\nwant body: %s\ngot prog : %s\nwant prog: %s",
+					string(gotJSON),
+					wantJSON,
+					gotBody,
+					wantBody,
+					gotProg,
+					wantProg,
+				)
 			}
 		})
 	}

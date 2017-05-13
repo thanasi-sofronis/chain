@@ -15,14 +15,16 @@ type (
 	}
 
 	compileResp struct {
-		Name    string              `json:"name"`
-		Source  string              `json:"source"`
-		Program chainjson.HexBytes  `json:"program"`
-		Params  []ivy.ContractParam `json:"params"`
-		Value   string              `json:"value"`
-		Clauses []ivy.ClauseInfo    `json:"clause_info"`
-		Opcodes string              `json:"opcodes"`
-		Error   string              `json:"error"`
+		Name        string              `json:"name"`
+		Source      string              `json:"source"`
+		Body        chainjson.HexBytes  `json:"body"`
+		Program     chainjson.HexBytes  `json:"program"`
+		Params      []ivy.ContractParam `json:"params"`
+		Value       string              `json:"value"`
+		Clauses     []ivy.ClauseInfo    `json:"clause_info"`
+		BodyOpcodes string              `json:"body_opcodes"`
+		ProgOpcodes string              `json:"program_opcodes"`
+		Error       string              `json:"error"`
 	}
 )
 
@@ -34,9 +36,14 @@ func compileIvy(req compileReq) (compileResp, error) {
 		resp.Source = req.Contract
 		resp.Params = compiled.Params
 		resp.Value = compiled.Value
+		resp.Body = compiled.Body
 		resp.Program = compiled.Program
 		resp.Clauses = compiled.Clauses
-		resp.Opcodes, err = vm.Disassemble(resp.Program)
+		resp.BodyOpcodes, err = vm.Disassemble(resp.Body)
+		if err != nil {
+			return resp, err
+		}
+		resp.ProgOpcodes, err = vm.Disassemble(resp.Program)
 		if err != nil {
 			return resp, err
 		}

@@ -11,11 +11,13 @@ import (
 	chainjson "chain/encoding/json"
 	"chain/errors"
 	"chain/protocol/vm"
+	"chain/protocol/vmutil"
 )
 
 type (
 	CompileResult struct {
 		Name    string             `json:"name"`
+		Body    chainjson.HexBytes `json:"body"`
 		Program chainjson.HexBytes `json:"program"`
 		Value   string             `json:"value"`
 		Params  []ContractParam    `json:"params"`
@@ -73,12 +75,17 @@ func Compile(r io.Reader, args []ContractArg) (CompileResult, error) {
 	if err != nil {
 		return CompileResult{}, errors.Wrap(err, "parse error")
 	}
-	prog, err := compileContract(c)
+	body, err := compileContract(c)
 	if err != nil {
 		return CompileResult{}, errors.Wrap(err, "compiling contract")
 	}
+	prog, err := instantiate(c, body, args)
+	if err != nil {
+		return CompileResult{}, errors.Wrap(err, "instantiating contract")
+	}
 	result := CompileResult{
 		Name:    c.name,
+		Body:    body,
 		Program: prog,
 		Params:  []ContractParam{},
 		Value:   c.value,
@@ -132,6 +139,47 @@ func Compile(r io.Reader, args []ContractArg) (CompileResult, error) {
 		result.Clauses = append(result.Clauses, info)
 	}
 	return result, nil
+}
+
+// instantiate packages body, the output of compileContract(contract),
+// as a control program with args as the contract parameters.
+// The control program is:
+//   <body> <argN> <argN-1> ... <arg1> N+1 DUP PICK 0 CHECKPREDICATE
+// This format gives us two things:
+//   1. It preserves any JUMP/JUMPIF instructions in <body>, which
+//      would be invalidated if we simply prepended pushdatas to it
+//      (to set up the contract args).
+//   2. It makes a copy of <body> available on the stack for
+//      recursive calls to the contract with new parameters.
+// Thanks to @dan for suggesting this quining approach.
+func instantiate(contract *contract, body []byte, args []ContractArg) ([]byte, error) {
+	// xxx type-check args
+	b := vmutil.NewBuilder(false)
+	b.AddData(body)
+
+	// xxx should this count backwards instead?
+	for _, a := range args {
+		switch {
+		case a.B != nil:
+			var n int64
+			if *a.B {
+				n = 1
+			}
+			b.AddInt64(n)
+		case a.I != nil:
+			b.AddInt64(*a.I)
+		case a.S != nil:
+			b.AddData(*a.S)
+		}
+	}
+
+	b.AddInt64(int64(len(args) + 1))
+	b.AddOp(vm.OP_DUP)
+	b.AddOp(vm.OP_PICK)
+	b.AddInt64(0)
+	b.AddOp(vm.OP_CHECKPREDICATE)
+
+	return b.Build()
 }
 
 // A name for the stack item representing the compiled, uninstantiated
@@ -467,23 +515,41 @@ func compileExpr(b *builder, stack []stackEntry, contract *contract, clause *cla
 				b.addData(nil)
 				stack = append(stack, stackEntry(e.String()))
 				for i := len(e.args) - 1; i >= 0; i-- {
-					err := compileExpr(b, stack, contract, clause, env, e.args[i])
+					stack, err := compileExpr(b, stack, contract, clause, env, counts, e.args[i])
 					if err != nil {
-						return errors.Wrap(err, "compiling contract call")
+						return nil, errors.Wrap(err, "compiling contract call")
 					}
 					b.addOp(vm.OP_CATPUSHDATA)
+					stack = stack[:len(stack)-1]
 				}
-				err := compileRef(b, stack, quineName)
+				var err error
+				stack, err = compileRef(b, stack, counts, quineName)
 				if err != nil {
-					return errors.Wrap(err, "compiling contract call")
+					return nil, errors.Wrap(err, "compiling contract call")
 				}
 				b.addOp(vm.OP_CATPUSHDATA)
+				stack = stack[:len(stack)-1]
+
+				// TODO(bobg): from this point, everything can be done with a
+				// single CATPUSHDATA (by coalescing the bits of data known at
+				// compile time).
+
+				// # args for CHECKPREDICATE
 				b.addInt64(int64(1 + len(e.args)))
 				b.addOp(vm.OP_CATPUSHDATA)
-				b.addData([]byte{byte(vm.OP_OVER), byte(vm.OP_CHECKPREDICATE)})
+
+				// prog for CHECKPREDICATE (the quined contract body)
+				b.addData([]byte{byte(vm.OP_DUP), byte(vm.OP_PICK)})
 				b.addOp(vm.OP_CATPUSHDATA)
 
-				return nil
+				// runlimit for CHECKPREDICATE
+				b.addInt64(0)
+				b.addOp(vm.OP_CATPUSHDATA)
+
+				b.addData([]byte{byte(vm.OP_CHECKPREDICATE)})
+				b.addOp(vm.OP_CATPUSHDATA)
+
+				return stack, nil
 			}
 			return nil, fmt.Errorf("unknown function \"%s\"", e.fn)
 		}
