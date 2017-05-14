@@ -2,6 +2,32 @@ package ivy
 
 import "fmt"
 
+// Look for recursive calls in contract. Set contract.recursive if
+// found.
+func checkRecursive(contract *contract) {
+	for _, clause := range contract.clauses {
+		for _, stmt := range clause.statements {
+			switch s := stmt.(type) {
+			case *verifyStatement:
+				if references(s.expr, contract.name) {
+					contract.recursive = true
+					return
+				}
+			case *lockStatement:
+				if references(s.locked, contract.name) || references(s.program, contract.name) {
+					contract.recursive = true
+					return
+				}
+			case *unlockStatement:
+				if references(s.expr, contract.name) {
+					contract.recursive = true
+					return
+				}
+			}
+		}
+	}
+}
+
 func prohibitValueParams(contract *contract) error {
 	for _, p := range contract.params {
 		if p.typ == valueType {

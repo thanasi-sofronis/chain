@@ -154,28 +154,38 @@ func Compile(r io.Reader, args []ContractArg) (CompileResult, error) {
 // Thanks to @dan for suggesting this quining approach.
 func instantiate(contract *contract, body []byte, args []ContractArg) ([]byte, error) {
 	// xxx type-check args
-	b := vmutil.NewBuilder(false)
-	b.AddData(body)
 
-	// xxx should this count backwards instead?
-	for _, a := range args {
-		switch {
-		case a.B != nil:
-			var n int64
-			if *a.B {
-				n = 1
+	b := vmutil.NewBuilder(false)
+
+	addArgs := func() {
+		for i := len(args) - 1; i >= 0; i-- {
+			a := args[i]
+			switch {
+			case a.B != nil:
+				var n int64
+				if *a.B {
+					n = 1
+				}
+				b.AddInt64(n)
+			case a.I != nil:
+				b.AddInt64(*a.I)
+			case a.S != nil:
+				b.AddData(*a.S)
 			}
-			b.AddInt64(n)
-		case a.I != nil:
-			b.AddInt64(*a.I)
-		case a.S != nil:
-			b.AddData(*a.S)
 		}
 	}
 
-	b.AddInt64(int64(len(args) + 1))
-	b.AddOp(vm.OP_DUP)
-	b.AddOp(vm.OP_PICK)
+	if contract.recursive {
+		b.AddData(body)
+		addArgs()
+		b.AddInt64(int64(len(args) + 1))
+		b.AddOp(vm.OP_DUP)
+		b.AddOp(vm.OP_PICK)
+	} else {
+		addArgs()
+		b.AddInt64(int64(len(args)))
+		b.AddData(body)
+	}
 	b.AddInt64(0)
 	b.AddOp(vm.OP_CHECKPREDICATE)
 
@@ -227,8 +237,13 @@ func compileContract(contract *contract) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	checkRecursive(contract)
 
-	stack := []stackEntry{stackEntry(quineName)}
+	var stack []stackEntry
+
+	if contract.recursive {
+		stack = append(stack, stackEntry(quineName))
+	}
 	stack = addParamsToStack(stack, contract.params)
 
 	b := newBuilder()

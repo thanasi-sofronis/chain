@@ -12,6 +12,10 @@ type contract struct {
 	params  []*param
 	clauses []*clause
 	value   string
+
+	// decoration - does the contract call itself?
+	// (if so, it has to be quined)
+	recursive bool
 }
 
 type param struct {
