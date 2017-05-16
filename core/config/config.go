@@ -80,21 +80,22 @@ func Load(ctx context.Context, db pg.DB, sdb *sinkdb.DB) (*Config, error) {
 	// If we were able to find a config in Postgres, store it in sinkdb.
 	// This also means that we are running this core with raft/sinkdb
 	// for the first time which means that we will also migrate access tokens.
-	err = sdb.Exec(ctx,
-		sinkdb.IfNotExists("/core/config"),
-		sinkdb.Set("/core/config", c))
+	ops, err := accessTokensMigration(ctx, db)
 	if err != nil {
 		return nil, errors.Wrap(err)
 	}
+	ops = append(ops, sinkdb.IfNotExists("/core/config"))
+	ops = append(ops, sinkdb.Set("/core/config", c))
+	err = sdb.Exec(ctx, ops...)
+	if err != nil {
+		return nil, errors.Wrap(err)
+	}
+
 	err = deleteFromPG(ctx, db)
 	if err != nil {
 		// If we got this far but failed to delete from PG, it's really NBD. Just
 		// log the failure and carry on.
 		log.Error(ctx, err, "failed to delete config from postgres")
-	}
-	err = migrateAccessTokens(ctx, db, sdb)
-	if err != nil {
-		panic(err)
 	}
 	return c, nil
 }
@@ -281,9 +282,7 @@ func tryGenerator(ctx context.Context, url, accessToken, blockchainID string, ht
 	return nil
 }
 
-// TODO(tessr): make all of this atomic in raft, so we don't get halfway through
-// a postgres->raft migration and fail, losing the second half of the migration
-func migrateAccessTokens(ctx context.Context, db pg.DB, sdb *sinkdb.DB) error {
+func accessTokensMigration(ctx context.Context, db pg.DB) ([]sinkdb.Op, error) {
 	const q = `SELECT id, type, created FROM access_tokens`
 	var tokens []*accesstoken.Token
 	err := pg.ForQueryRows(ctx, db, q, func(id string, maybeType sql.NullString, created time.Time) {
@@ -294,7 +293,11 @@ func migrateAccessTokens(ctx context.Context, db pg.DB, sdb *sinkdb.DB) error {
 		}
 		tokens = append(tokens, t)
 	})
+	if err != nil {
+		return nil, err
+	}
 
+	grants := make(map[string][]*authz.Grant)
 	for _, token := range tokens {
 		data := map[string]interface{}{
 			"id": token.ID,
@@ -304,7 +307,7 @@ func migrateAccessTokens(ctx context.Context, db pg.DB, sdb *sinkdb.DB) error {
 			panic(err) // should never get here
 		}
 
-		grant := authz.Grant{
+		grant := &authz.Grant{
 			GuardType: "access_token",
 			GuardData: guardData,
 			CreatedAt: token.Created.Format(time.RFC3339),
@@ -315,10 +318,14 @@ func migrateAccessTokens(ctx context.Context, db pg.DB, sdb *sinkdb.DB) error {
 		case "network":
 			grant.Policy = "crosscore"
 		}
-		_, err = authz.StoreGrant(ctx, sdb, grant, GrantPrefix)
-		if err != nil {
-			return errors.Wrap(err)
-		}
+		grants[grant.Policy] = append(grants[grant.Policy], grant)
 	}
-	return err
+
+	var ops []sinkdb.Op
+	for policy, grants := range grants {
+		// TODO(jackson): abstract/hide the kv layout of grants in the
+		// authz package.
+		ops = append(ops, sinkdb.Set(GrantPrefix+policy, &authz.GrantList{Grants: grants}))
+	}
+	return ops, nil
 }
