@@ -33,6 +33,7 @@ import (
 	"chain/crypto/ed25519"
 	"chain/database/pg"
 	"chain/database/sinkdb"
+	"chain/database/sinkdb/store"
 	"chain/database/sqlutil"
 	"chain/encoding/json"
 	"chain/env"
@@ -124,6 +125,8 @@ func main() {
 	if *v {
 		return
 	}
+
+	store.Rock()
 
 	fmt.Printf("\n")
 
